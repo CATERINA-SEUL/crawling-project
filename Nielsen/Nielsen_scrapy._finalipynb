@@ -1,0 +1,856 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "#### Nielsen\n",
+    "----"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import requests\n",
+    "import pandas as pd\n",
+    "import json\n",
+    "from bs4 import BeautifulSoup"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "#### 1. 프로젝트 생성"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "metadata": {
+    "scrolled": true
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "New Scrapy project 'nielsen', using template directory '/home/ubuntu/.pyenv/versions/3.6.9/envs/python3/lib/python3.6/site-packages/scrapy/templates/project', created in:\r\n",
+      "    /home/ubuntu/python3/notebook/crawling/nielsen\r\n",
+      "\r\n",
+      "You can start your first spider with:\r\n",
+      "    cd nielsen\r\n",
+      "    scrapy genspider example example.com\r\n"
+     ]
+    }
+   ],
+   "source": [
+    "!scrapy startproject nielsen"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "#### 2. items.py 수정"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 12,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Overwriting ./nielsen/nielsen/items.py\n"
+     ]
+    }
+   ],
+   "source": [
+    "%%writefile ./nielsen/nielsen/items.py\n",
+    "\n",
+    "import scrapy\n",
+    "class NielsenItem(scrapy.Item):\n",
+    "\n",
+    "    rank = scrapy.Field()\n",
+    "    broadcast = scrapy.Field()\n",
+    "    program = scrapy.Field()\n",
+    "    rate = scrapy.Field()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "#### 3. spider.py 생성"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 71,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Overwriting ./nielsen/nielsen/spiders/spider.py\n"
+     ]
+    }
+   ],
+   "source": [
+    "%%writefile ./nielsen/nielsen/spiders/spider.py\n",
+    "\n",
+    "import scrapy\n",
+    "from bs4 import BeautifulSoup\n",
+    "from datetime import datetime, timedelta\n",
+    "\n",
+    "from nielsen.items import NielsenItem\n",
+    "from scrapy.http import HtmlResponse\n",
+    "from scrapy.selector import Selector\n",
+    "\n",
+    "\n",
+    "class Spider(scrapy.Spider):\n",
+    "    \n",
+    "    name = 'Nielsen'\n",
+    "    \n",
+    "    def __init__(self, **kwargs):\n",
+    "        self.start_urls = 'http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu={}_1'.format(kwargs['category'])\n",
+    "    \n",
+    "        super().__init__(**kwargs)\n",
+    "        \n",
+    "    def start_requests(self):\n",
+    "        if self.start_urls == 'http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=1_1':\n",
+    "            yield scrapy.Request(url = self.start_urls, callback=self.get_content1)\n",
+    "        else:\n",
+    "            yield scrapy.Request(url = self.start_urls, callback=self.get_content2)\n",
+    "            \n",
+    "    def get_content1(self, response):\n",
+    "        dom = BeautifulSoup(response.body ,'html.parser')\n",
+    "        ranks = dom.select('.tb_txt_center')[0:40:2]\n",
+    "        broadcasts = dom.select('.tb_txt_center')[1:40:2]\n",
+    "        programs = dom.select('table.ranking_tb .tb_txt')[0:20]\n",
+    "        rates_10 = dom.select('table.ranking_tb .percent')\n",
+    "        rates_20 = dom.select('table.ranking_tb .percent_g')\n",
+    "        rates_all = rates_10[:10]+rates_20[:10]\n",
+    "        \n",
+    "        item = NielsenItem()\n",
+    "        \n",
+    "        for rank, broadcast, program, rate in zip(ranks, broadcasts, programs, rates_all):\n",
+    "            \n",
+    "            item['rank'] = rank.text.split('\\t')[0]\n",
+    "            item['broadcast'] = broadcast.text.split('\\t')[0]\n",
+    "            item['program'] = program.text.split('\\t')[0]\n",
+    "            item['rate'] = rate.text.strip()\n",
+    "        \n",
+    "            yield item\n",
+    "        \n",
+    "    def get_content2(self, response):\n",
+    "        dom = BeautifulSoup(response.body ,'html.parser')\n",
+    "        ranks = dom.select('.tb_txt_center')[0:20:2]\n",
+    "        broadcasts = dom.select('.tb_txt_center')[1:20:2]\n",
+    "        programs = dom.select('table.ranking_tb .tb_txt')[0:10]\n",
+    "        rates_10 = dom.select('table.ranking_tb .percent')\n",
+    "        rates_20 = dom.select('table.ranking_tb .percent_g')\n",
+    "        rates_all = rates_10[:10]+rates_20[:10]\n",
+    "        \n",
+    "        item = NielsenItem()\n",
+    "        \n",
+    "        for rank, broadcast, program, rate in zip(ranks, broadcasts, programs, rates_all):\n",
+    "            \n",
+    "            item['rank'] = rank.text.split('\\t')[0]\n",
+    "            item['broadcast'] = broadcast.text.split('\\t')[0]\n",
+    "            item['program'] = program.text.split('\\t')[0]\n",
+    "            item['rate'] = rate.text.strip()\n",
+    "        \n",
+    "            yield item"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 77,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Overwriting nielsen/run.sh\n"
+     ]
+    }
+   ],
+   "source": [
+    "%%writefile nielsen/run.sh\n",
+    "cd nielsen\n",
+    "scrapy crawl Nielsen -o nielsen_ground.csv -a category=1\n",
+    "scrapy crawl Nielsen -o nielsen_general.csv -a category=2\n",
+    "scrapy crawl Nielsen -o nielsen_cabletv.csv -a category=3"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 7,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "!chmod 764 ./nielsen/run.sh"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 62,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "-rwxrw-r-- 1 ubuntu ubuntu 184 Mar 18 14:31 ./nielsen/run.sh\r\n"
+     ]
+    }
+   ],
+   "source": [
+    "!ls -al ./nielsen/run.sh"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 78,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Overwriting ./nielsen/nielsen/mongodb.py\n"
+     ]
+    }
+   ],
+   "source": [
+    "%%writefile ./nielsen/nielsen/mongodb.py\n",
+    "import pymongo\n",
+    "\n",
+    "client = pymongo.MongoClient('mongodb://test:testpw@15.165.136.173:27017')\n",
+    "db = client.nielsen_server\n",
+    "collection = db.items"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 79,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Overwriting ./nielsen/nielsen/pipelines.py\n"
+     ]
+    }
+   ],
+   "source": [
+    "%%writefile ./nielsen/nielsen/pipelines.py\n",
+    "from .mongodb import collection\n",
+    "\n",
+    "class NielsenPipeline(object):\n",
+    "    def process_item(self, item, spider):\n",
+    "        columns = [\"rank\", \"program\", \"broadcast\",\"rate\"]\n",
+    "        data = {column: item[column] for column in columns}\n",
+    "        collection.insert(data)\n",
+    "        \n",
+    "        return item"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 65,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "!echo \"ITEM_PIPELINES = {\" >> nielsen/nielsen/settings.py '\\n nielsen.pipelines.NielsenPipeline' : 300, \"\\n}\" >> nielsen/nielsen/settings.py"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 67,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "ITEM_PIPELINES = { \r\n",
+      " 'nielsen.pipelines.NielsenPipeline' : 300, \r\n",
+      "}\r\n"
+     ]
+    }
+   ],
+   "source": [
+    "!tail -n 3 nielsen/nielsen/settings.py"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 80,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "2020-03-18 14:44:33 [scrapy.utils.log] INFO: Scrapy 1.8.0 started (bot: nielsen)\n",
+      "2020-03-18 14:44:33 [scrapy.utils.log] INFO: Versions: lxml 4.5.0.0, libxml2 2.9.10, cssselect 1.1.0, parsel 1.5.2, w3lib 1.21.0, Twisted 19.10.0, Python 3.6.9 (default, Jan 17 2020, 13:17:41) - [GCC 7.4.0], pyOpenSSL 19.1.0 (OpenSSL 1.1.1d  10 Sep 2019), cryptography 2.8, Platform Linux-4.15.0-1060-aws-x86_64-with-debian-buster-sid\n",
+      "2020-03-18 14:44:33 [scrapy.crawler] INFO: Overridden settings: {'BOT_NAME': 'nielsen', 'FEED_FORMAT': 'csv', 'FEED_URI': 'nielsen_ground.csv', 'NEWSPIDER_MODULE': 'nielsen.spiders', 'SPIDER_MODULES': ['nielsen.spiders']}\n",
+      "2020-03-18 14:44:33 [scrapy.extensions.telnet] INFO: Telnet Password: 8529dafb31f1a0f2\n",
+      "2020-03-18 14:44:33 [scrapy.middleware] INFO: Enabled extensions:\n",
+      "['scrapy.extensions.corestats.CoreStats',\n",
+      " 'scrapy.extensions.telnet.TelnetConsole',\n",
+      " 'scrapy.extensions.memusage.MemoryUsage',\n",
+      " 'scrapy.extensions.feedexport.FeedExporter',\n",
+      " 'scrapy.extensions.logstats.LogStats']\n",
+      "2020-03-18 14:44:33 [scrapy.middleware] INFO: Enabled downloader middlewares:\n",
+      "['scrapy.downloadermiddlewares.httpauth.HttpAuthMiddleware',\n",
+      " 'scrapy.downloadermiddlewares.downloadtimeout.DownloadTimeoutMiddleware',\n",
+      " 'scrapy.downloadermiddlewares.defaultheaders.DefaultHeadersMiddleware',\n",
+      " 'scrapy.downloadermiddlewares.useragent.UserAgentMiddleware',\n",
+      " 'scrapy.downloadermiddlewares.retry.RetryMiddleware',\n",
+      " 'scrapy.downloadermiddlewares.redirect.MetaRefreshMiddleware',\n",
+      " 'scrapy.downloadermiddlewares.httpcompression.HttpCompressionMiddleware',\n",
+      " 'scrapy.downloadermiddlewares.redirect.RedirectMiddleware',\n",
+      " 'scrapy.downloadermiddlewares.cookies.CookiesMiddleware',\n",
+      " 'scrapy.downloadermiddlewares.httpproxy.HttpProxyMiddleware',\n",
+      " 'scrapy.downloadermiddlewares.stats.DownloaderStats']\n",
+      "2020-03-18 14:44:33 [scrapy.middleware] INFO: Enabled spider middlewares:\n",
+      "['scrapy.spidermiddlewares.httperror.HttpErrorMiddleware',\n",
+      " 'scrapy.spidermiddlewares.offsite.OffsiteMiddleware',\n",
+      " 'scrapy.spidermiddlewares.referer.RefererMiddleware',\n",
+      " 'scrapy.spidermiddlewares.urllength.UrlLengthMiddleware',\n",
+      " 'scrapy.spidermiddlewares.depth.DepthMiddleware']\n",
+      "2020-03-18 14:44:33 [scrapy.middleware] INFO: Enabled item pipelines:\n",
+      "['nielsen.pipelines.NielsenPipeline']\n",
+      "2020-03-18 14:44:33 [scrapy.core.engine] INFO: Spider opened\n",
+      "2020-03-18 14:44:33 [scrapy.extensions.logstats] INFO: Crawled 0 pages (at 0 pages/min), scraped 0 items (at 0 items/min)\n",
+      "2020-03-18 14:44:33 [scrapy.extensions.telnet] INFO: Telnet console listening on 127.0.0.1:6023\n",
+      "2020-03-18 14:44:33 [scrapy.core.engine] DEBUG: Crawled (200) <GET http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=1_1> (referer: None)\n",
+      "2020-03-18 14:44:33 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=1_1>\n",
+      "{'broadcast': 'KBS1', 'program': '일일연속극(꽃길만걸어요)', 'rank': '1', 'rate': '22.1'}\n",
+      "2020-03-18 14:44:33 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=1_1>\n",
+      "{'broadcast': 'KBS2', 'program': '일일드라마(우아한모녀)', 'rank': '2', 'rate': '16.8'}\n",
+      "2020-03-18 14:44:33 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=1_1>\n",
+      "{'broadcast': 'KBS1', 'program': 'KBS9시뉴스', 'rank': '3', 'rate': '14.8'}\n",
+      "2020-03-18 14:44:33 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=1_1>\n",
+      "{'broadcast': 'KBS1', 'program': '인간극장', 'rank': '4', 'rate': '10.3'}\n",
+      "2020-03-18 14:44:33 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=1_1>\n",
+      "{'broadcast': 'KBS1', 'program': '아침마당', 'rank': '5', 'rate': '9.1'}\n",
+      "2020-03-18 14:44:33 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=1_1>\n",
+      "{'broadcast': 'SBS', 'program': '월화드라마(아무도모른다)', 'rank': '5', 'rate': '9.1'}\n",
+      "2020-03-18 14:44:33 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=1_1>\n",
+      "{'broadcast': 'KBS1', 'program': 'KBS뉴스7', 'rank': '7', 'rate': '9.0'}\n",
+      "2020-03-18 14:44:33 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=1_1>\n",
+      "{'broadcast': 'SBS', 'program': '아침연속극(맛좀보실래요)', 'rank': '8', 'rate': '8.7'}\n",
+      "2020-03-18 14:44:33 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=1_1>\n",
+      "{'broadcast': 'MBC', 'program': 'MBC뉴스데스크', 'rank': '9', 'rate': '8.1'}\n",
+      "2020-03-18 14:44:33 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=1_1>\n",
+      "{'broadcast': 'KBS1', 'program': '6시내고향', 'rank': '10', 'rate': '8.0'}\n",
+      "2020-03-18 14:44:33 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=1_1>\n",
+      "{'broadcast': 'SBS', 'program': '월화드라마(아무도모른다)', 'rank': '11', 'rate': '7.6'}\n",
+      "2020-03-18 14:44:33 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=1_1>\n",
+      "{'broadcast': 'KBS1', 'program': '코로나19통합뉴스룸', 'rank': '12', 'rate': '7.1'}\n",
+      "2020-03-18 14:44:33 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=1_1>\n",
+      "{'broadcast': 'SBS', 'program': '불타는청춘', 'rank': '13', 'rate': '7.0'}\n",
+      "2020-03-18 14:44:33 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=1_1>\n",
+      "{'broadcast': 'KBS1', 'program': 'KBS뉴스광장2부', 'rank': '14', 'rate': '6.7'}\n",
+      "2020-03-18 14:44:33 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=1_1>\n",
+      "{'broadcast': 'SBS', 'program': 'SBS8뉴스', 'rank': '15', 'rate': '6.6'}\n",
+      "2020-03-18 14:44:33 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=1_1>\n",
+      "{'broadcast': 'KBS1', 'program': 'KBS뉴스12', 'rank': '16', 'rate': '6.3'}\n",
+      "2020-03-18 14:44:33 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=1_1>\n",
+      "{'broadcast': 'MBC', 'program': '휴먼다큐사람이좋다', 'rank': '17', 'rate': '6.0'}\n",
+      "2020-03-18 14:44:33 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=1_1>\n",
+      "{'broadcast': 'KBS1', 'program': '이웃집찰스', 'rank': '18', 'rate': '5.9'}\n",
+      "2020-03-18 14:44:33 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=1_1>\n",
+      "{'broadcast': 'SBS', 'program': '생활의달인', 'rank': '18', 'rate': '5.9'}\n",
+      "2020-03-18 14:44:33 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=1_1>\n",
+      "{'broadcast': 'SBS', 'program': '불타는청춘', 'rank': '20', 'rate': '5.8'}\n",
+      "2020-03-18 14:44:33 [scrapy.core.engine] INFO: Closing spider (finished)\n",
+      "2020-03-18 14:44:33 [scrapy.extensions.feedexport] INFO: Stored csv feed (20 items) in: nielsen_ground.csv\n",
+      "2020-03-18 14:44:33 [scrapy.statscollectors] INFO: Dumping Scrapy stats:\n",
+      "{'downloader/request_bytes': 263,\n",
+      " 'downloader/request_count': 1,\n",
+      " 'downloader/request_method_count/GET': 1,\n",
+      " 'downloader/response_bytes': 34106,\n",
+      " 'downloader/response_count': 1,\n",
+      " 'downloader/response_status_count/200': 1,\n",
+      " 'elapsed_time_seconds': 0.332679,\n",
+      " 'finish_reason': 'finished',\n",
+      " 'finish_time': datetime.datetime(2020, 3, 18, 5, 44, 33, 747172),\n",
+      " 'item_scraped_count': 20,\n",
+      " 'log_count/DEBUG': 21,\n",
+      " 'log_count/INFO': 11,\n",
+      " 'memusage/max': 58531840,\n",
+      " 'memusage/startup': 58531840,\n",
+      " 'response_received_count': 1,\n",
+      " 'scheduler/dequeued': 1,\n",
+      " 'scheduler/dequeued/memory': 1,\n",
+      " 'scheduler/enqueued': 1,\n",
+      " 'scheduler/enqueued/memory': 1,\n",
+      " 'start_time': datetime.datetime(2020, 3, 18, 5, 44, 33, 414493)}\n",
+      "2020-03-18 14:44:33 [scrapy.core.engine] INFO: Spider closed (finished)\n",
+      "2020-03-18 14:44:34 [scrapy.utils.log] INFO: Scrapy 1.8.0 started (bot: nielsen)\n",
+      "2020-03-18 14:44:34 [scrapy.utils.log] INFO: Versions: lxml 4.5.0.0, libxml2 2.9.10, cssselect 1.1.0, parsel 1.5.2, w3lib 1.21.0, Twisted 19.10.0, Python 3.6.9 (default, Jan 17 2020, 13:17:41) - [GCC 7.4.0], pyOpenSSL 19.1.0 (OpenSSL 1.1.1d  10 Sep 2019), cryptography 2.8, Platform Linux-4.15.0-1060-aws-x86_64-with-debian-buster-sid\n",
+      "2020-03-18 14:44:34 [scrapy.crawler] INFO: Overridden settings: {'BOT_NAME': 'nielsen', 'FEED_FORMAT': 'csv', 'FEED_URI': 'nielsen_general.csv', 'NEWSPIDER_MODULE': 'nielsen.spiders', 'SPIDER_MODULES': ['nielsen.spiders']}\n",
+      "2020-03-18 14:44:34 [scrapy.extensions.telnet] INFO: Telnet Password: 702517268743c184\n"
+     ]
+    },
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "2020-03-18 14:44:34 [scrapy.middleware] INFO: Enabled extensions:\n",
+      "['scrapy.extensions.corestats.CoreStats',\n",
+      " 'scrapy.extensions.telnet.TelnetConsole',\n",
+      " 'scrapy.extensions.memusage.MemoryUsage',\n",
+      " 'scrapy.extensions.feedexport.FeedExporter',\n",
+      " 'scrapy.extensions.logstats.LogStats']\n",
+      "2020-03-18 14:44:34 [scrapy.middleware] INFO: Enabled downloader middlewares:\n",
+      "['scrapy.downloadermiddlewares.httpauth.HttpAuthMiddleware',\n",
+      " 'scrapy.downloadermiddlewares.downloadtimeout.DownloadTimeoutMiddleware',\n",
+      " 'scrapy.downloadermiddlewares.defaultheaders.DefaultHeadersMiddleware',\n",
+      " 'scrapy.downloadermiddlewares.useragent.UserAgentMiddleware',\n",
+      " 'scrapy.downloadermiddlewares.retry.RetryMiddleware',\n",
+      " 'scrapy.downloadermiddlewares.redirect.MetaRefreshMiddleware',\n",
+      " 'scrapy.downloadermiddlewares.httpcompression.HttpCompressionMiddleware',\n",
+      " 'scrapy.downloadermiddlewares.redirect.RedirectMiddleware',\n",
+      " 'scrapy.downloadermiddlewares.cookies.CookiesMiddleware',\n",
+      " 'scrapy.downloadermiddlewares.httpproxy.HttpProxyMiddleware',\n",
+      " 'scrapy.downloadermiddlewares.stats.DownloaderStats']\n",
+      "2020-03-18 14:44:34 [scrapy.middleware] INFO: Enabled spider middlewares:\n",
+      "['scrapy.spidermiddlewares.httperror.HttpErrorMiddleware',\n",
+      " 'scrapy.spidermiddlewares.offsite.OffsiteMiddleware',\n",
+      " 'scrapy.spidermiddlewares.referer.RefererMiddleware',\n",
+      " 'scrapy.spidermiddlewares.urllength.UrlLengthMiddleware',\n",
+      " 'scrapy.spidermiddlewares.depth.DepthMiddleware']\n",
+      "2020-03-18 14:44:34 [scrapy.middleware] INFO: Enabled item pipelines:\n",
+      "['nielsen.pipelines.NielsenPipeline']\n",
+      "2020-03-18 14:44:34 [scrapy.core.engine] INFO: Spider opened\n",
+      "2020-03-18 14:44:34 [scrapy.extensions.logstats] INFO: Crawled 0 pages (at 0 pages/min), scraped 0 items (at 0 items/min)\n",
+      "2020-03-18 14:44:34 [scrapy.extensions.telnet] INFO: Telnet console listening on 127.0.0.1:6023\n",
+      "2020-03-18 14:44:34 [scrapy.core.engine] DEBUG: Crawled (200) <GET http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=2_1> (referer: None)\n",
+      "2020-03-18 14:44:35 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=2_1>\n",
+      "{'broadcast': 'TV CHOSUN',\n",
+      " 'program': '세상어디에도없는아내의맛2부',\n",
+      " 'rank': '1',\n",
+      " 'rate': '10.566'}\n",
+      "2020-03-18 14:44:35 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=2_1>\n",
+      "{'broadcast': 'TV CHOSUN',\n",
+      " 'program': '세상어디에도없는아내의맛1부',\n",
+      " 'rank': '2',\n",
+      " 'rate': '6.019'}\n",
+      "2020-03-18 14:44:35 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=2_1>\n",
+      "{'broadcast': 'TV CHOSUN', 'program': 'TV조선뉴스9', 'rank': '3', 'rate': '5.556'}\n",
+      "2020-03-18 14:44:35 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=2_1>\n",
+      "{'broadcast': 'JTBC', 'program': 'JTBC뉴스룸', 'rank': '4', 'rate': '4.414'}\n",
+      "2020-03-18 14:44:35 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=2_1>\n",
+      "{'broadcast': 'TV CHOSUN', 'program': '보도본부핫라인', 'rank': '5', 'rate': '4.255'}\n",
+      "2020-03-18 14:44:35 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=2_1>\n",
+      "{'broadcast': 'MBN', 'program': 'MBN종합뉴스', 'rank': '6', 'rate': '4.175'}\n",
+      "2020-03-18 14:44:35 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=2_1>\n",
+      "{'broadcast': 'MBN', 'program': '휴먼다큐(사노라면)', 'rank': '7', 'rate': '4.128'}\n",
+      "2020-03-18 14:44:35 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=2_1>\n",
+      "{'broadcast': 'TV CHOSUN', 'program': '시사쇼이것이정치다', 'rank': '8', 'rate': '3.882'}\n",
+      "2020-03-18 14:44:35 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=2_1>\n",
+      "{'broadcast': '채널A', 'program': '뉴스TOP10', 'rank': '9', 'rate': '3.504'}\n",
+      "2020-03-18 14:44:35 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=2_1>\n",
+      "{'broadcast': '채널A', 'program': '뉴스A', 'rank': '10', 'rate': '3.466'}\n",
+      "2020-03-18 14:44:35 [scrapy.core.engine] INFO: Closing spider (finished)\n",
+      "2020-03-18 14:44:35 [scrapy.extensions.feedexport] INFO: Stored csv feed (10 items) in: nielsen_general.csv\n",
+      "2020-03-18 14:44:35 [scrapy.statscollectors] INFO: Dumping Scrapy stats:\n",
+      "{'downloader/request_bytes': 263,\n",
+      " 'downloader/request_count': 1,\n",
+      " 'downloader/request_method_count/GET': 1,\n",
+      " 'downloader/response_bytes': 26497,\n",
+      " 'downloader/response_count': 1,\n",
+      " 'downloader/response_status_count/200': 1,\n",
+      " 'elapsed_time_seconds': 0.238461,\n",
+      " 'finish_reason': 'finished',\n",
+      " 'finish_time': datetime.datetime(2020, 3, 18, 5, 44, 35, 125323),\n",
+      " 'item_scraped_count': 10,\n",
+      " 'log_count/DEBUG': 11,\n",
+      " 'log_count/INFO': 11,\n",
+      " 'memusage/max': 58662912,\n",
+      " 'memusage/startup': 58662912,\n",
+      " 'response_received_count': 1,\n",
+      " 'scheduler/dequeued': 1,\n",
+      " 'scheduler/dequeued/memory': 1,\n",
+      " 'scheduler/enqueued': 1,\n",
+      " 'scheduler/enqueued/memory': 1,\n",
+      " 'start_time': datetime.datetime(2020, 3, 18, 5, 44, 34, 886862)}\n",
+      "2020-03-18 14:44:35 [scrapy.core.engine] INFO: Spider closed (finished)\n",
+      "2020-03-18 14:44:36 [scrapy.utils.log] INFO: Scrapy 1.8.0 started (bot: nielsen)\n",
+      "2020-03-18 14:44:36 [scrapy.utils.log] INFO: Versions: lxml 4.5.0.0, libxml2 2.9.10, cssselect 1.1.0, parsel 1.5.2, w3lib 1.21.0, Twisted 19.10.0, Python 3.6.9 (default, Jan 17 2020, 13:17:41) - [GCC 7.4.0], pyOpenSSL 19.1.0 (OpenSSL 1.1.1d  10 Sep 2019), cryptography 2.8, Platform Linux-4.15.0-1060-aws-x86_64-with-debian-buster-sid\n",
+      "2020-03-18 14:44:36 [scrapy.crawler] INFO: Overridden settings: {'BOT_NAME': 'nielsen', 'FEED_FORMAT': 'csv', 'FEED_URI': 'nielsen_cabletv.csv', 'NEWSPIDER_MODULE': 'nielsen.spiders', 'SPIDER_MODULES': ['nielsen.spiders']}\n",
+      "2020-03-18 14:44:36 [scrapy.extensions.telnet] INFO: Telnet Password: 5b44a89118ad8720\n",
+      "2020-03-18 14:44:36 [scrapy.middleware] INFO: Enabled extensions:\n",
+      "['scrapy.extensions.corestats.CoreStats',\n",
+      " 'scrapy.extensions.telnet.TelnetConsole',\n",
+      " 'scrapy.extensions.memusage.MemoryUsage',\n",
+      " 'scrapy.extensions.feedexport.FeedExporter',\n",
+      " 'scrapy.extensions.logstats.LogStats']\n",
+      "2020-03-18 14:44:36 [scrapy.middleware] INFO: Enabled downloader middlewares:\n",
+      "['scrapy.downloadermiddlewares.httpauth.HttpAuthMiddleware',\n",
+      " 'scrapy.downloadermiddlewares.downloadtimeout.DownloadTimeoutMiddleware',\n",
+      " 'scrapy.downloadermiddlewares.defaultheaders.DefaultHeadersMiddleware',\n",
+      " 'scrapy.downloadermiddlewares.useragent.UserAgentMiddleware',\n",
+      " 'scrapy.downloadermiddlewares.retry.RetryMiddleware',\n",
+      " 'scrapy.downloadermiddlewares.redirect.MetaRefreshMiddleware',\n",
+      " 'scrapy.downloadermiddlewares.httpcompression.HttpCompressionMiddleware',\n",
+      " 'scrapy.downloadermiddlewares.redirect.RedirectMiddleware',\n",
+      " 'scrapy.downloadermiddlewares.cookies.CookiesMiddleware',\n",
+      " 'scrapy.downloadermiddlewares.httpproxy.HttpProxyMiddleware',\n",
+      " 'scrapy.downloadermiddlewares.stats.DownloaderStats']\n",
+      "2020-03-18 14:44:36 [scrapy.middleware] INFO: Enabled spider middlewares:\n",
+      "['scrapy.spidermiddlewares.httperror.HttpErrorMiddleware',\n",
+      " 'scrapy.spidermiddlewares.offsite.OffsiteMiddleware',\n",
+      " 'scrapy.spidermiddlewares.referer.RefererMiddleware',\n",
+      " 'scrapy.spidermiddlewares.urllength.UrlLengthMiddleware',\n",
+      " 'scrapy.spidermiddlewares.depth.DepthMiddleware']\n",
+      "2020-03-18 14:44:36 [scrapy.middleware] INFO: Enabled item pipelines:\n",
+      "['nielsen.pipelines.NielsenPipeline']\n",
+      "2020-03-18 14:44:36 [scrapy.core.engine] INFO: Spider opened\n",
+      "2020-03-18 14:44:36 [scrapy.extensions.logstats] INFO: Crawled 0 pages (at 0 pages/min), scraped 0 items (at 0 items/min)\n",
+      "2020-03-18 14:44:36 [scrapy.extensions.telnet] INFO: Telnet console listening on 127.0.0.1:6023\n",
+      "2020-03-18 14:44:36 [scrapy.core.engine] DEBUG: Crawled (200) <GET http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=3_1> (referer: None)\n",
+      "2020-03-18 14:44:36 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=3_1>\n",
+      "{'broadcast': 'tvN', 'program': '월화드라마(방법<본>)', 'rank': '1', 'rate': '6.721'}\n",
+      "2020-03-18 14:44:36 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=3_1>\n",
+      "{'broadcast': '연합뉴스TV',\n",
+      " 'program': '뉴스특보코로나19COVID19',\n",
+      " 'rank': '2',\n",
+      " 'rate': '2.820'}\n",
+      "2020-03-18 14:44:36 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=3_1>\n",
+      "{'broadcast': '연합뉴스TV',\n",
+      " 'program': '뉴스특보코로나19COVID19',\n",
+      " 'rank': '3',\n",
+      " 'rate': '2.754'}\n",
+      "2020-03-18 14:44:36 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=3_1>\n",
+      "{'broadcast': '연합뉴스TV',\n",
+      " 'program': '뉴스특보코로나19COVID19',\n",
+      " 'rank': '4',\n",
+      " 'rate': '2.617'}\n",
+      "2020-03-18 14:44:36 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=3_1>\n",
+      "{'broadcast': 'tvN', 'program': '요즘책방책읽어드립니다<본>', 'rank': '5', 'rate': '2.591'}\n",
+      "2020-03-18 14:44:36 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=3_1>\n",
+      "{'broadcast': 'YTN', 'program': 'YTN뉴스특보', 'rank': '6', 'rate': '2.497'}\n",
+      "2020-03-18 14:44:36 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=3_1>\n",
+      "{'broadcast': '연합뉴스TV',\n",
+      " 'program': '뉴스특보코로나19COVID19',\n",
+      " 'rank': '7',\n",
+      " 'rate': '2.420'}\n",
+      "2020-03-18 14:44:36 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=3_1>\n",
+      "{'broadcast': 'YTN', 'program': 'YTN뉴스특보', 'rank': '8', 'rate': '2.312'}\n",
+      "2020-03-18 14:44:36 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=3_1>\n",
+      "{'broadcast': '연합뉴스TV',\n",
+      " 'program': '뉴스특보코로나19COVID19',\n",
+      " 'rank': '9',\n",
+      " 'rate': '2.292'}\n",
+      "2020-03-18 14:44:36 [scrapy.core.scraper] DEBUG: Scraped from <200 http://nielsenkorea.co.kr/tv_terrestrial_day.asp?menu=Tit_1&sub_menu=3_1>\n",
+      "{'broadcast': 'YTN', 'program': 'YTN뉴스특보', 'rank': '10', 'rate': '2.271'}\n",
+      "2020-03-18 14:44:36 [scrapy.core.engine] INFO: Closing spider (finished)\n",
+      "2020-03-18 14:44:36 [scrapy.extensions.feedexport] INFO: Stored csv feed (10 items) in: nielsen_cabletv.csv\n",
+      "2020-03-18 14:44:36 [scrapy.statscollectors] INFO: Dumping Scrapy stats:\n",
+      "{'downloader/request_bytes': 263,\n",
+      " 'downloader/request_count': 1,\n",
+      " 'downloader/request_method_count/GET': 1,\n",
+      " 'downloader/response_bytes': 26831,\n",
+      " 'downloader/response_count': 1,\n",
+      " 'downloader/response_status_count/200': 1,\n",
+      " 'elapsed_time_seconds': 0.236605,\n",
+      " 'finish_reason': 'finished',\n",
+      " 'finish_time': datetime.datetime(2020, 3, 18, 5, 44, 36, 471797),\n",
+      " 'item_scraped_count': 10,\n",
+      " 'log_count/DEBUG': 11,\n",
+      " 'log_count/INFO': 11,\n",
+      " 'memusage/max': 58449920,\n",
+      " 'memusage/startup': 58449920,\n",
+      " 'response_received_count': 1,\n",
+      " 'scheduler/dequeued': 1,\n",
+      " 'scheduler/dequeued/memory': 1,\n",
+      " 'scheduler/enqueued': 1,\n",
+      " 'scheduler/enqueued/memory': 1,\n",
+      " 'start_time': datetime.datetime(2020, 3, 18, 5, 44, 36, 235192)}\n",
+      "2020-03-18 14:44:36 [scrapy.core.engine] INFO: Spider closed (finished)\n"
+     ]
+    }
+   ],
+   "source": [
+    "!./nielsen/run.sh"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 81,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "{1: 'ground', 2: 'general', 3: 'cabletv'}"
+      ]
+     },
+     "execution_count": 81,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "categories = {1 : 'ground' , 2 : 'general' , 3 : 'cabletv'}\n",
+    "categories"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 82,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "dfs = [pd.read_csv(\"nielsen/nielsen_{}.csv\".format(category)) for category in categories.values()]"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 83,
+   "metadata": {
+    "scrolled": true
+   },
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "[('ground', 20), ('general', 10), ('cabletv', 10)]"
+      ]
+     },
+     "execution_count": 83,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "[(category, len(df)) for category, df in zip(categories.values(), dfs)]"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 76,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "!rm -rf nielsen/nielsen_cabletv.csv\n",
+    "!rm -rf nielsen/nielsen_general.csv\n",
+    "!rm -rf nielsen/nielsen_ground.csv"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 86,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/html": [
+       "<div>\n",
+       "<style scoped>\n",
+       "    .dataframe tbody tr th:only-of-type {\n",
+       "        vertical-align: middle;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe tbody tr th {\n",
+       "        vertical-align: top;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe thead th {\n",
+       "        text-align: right;\n",
+       "    }\n",
+       "</style>\n",
+       "<table border=\"1\" class=\"dataframe\">\n",
+       "  <thead>\n",
+       "    <tr style=\"text-align: right;\">\n",
+       "      <th></th>\n",
+       "      <th>broadcast</th>\n",
+       "      <th>program</th>\n",
+       "      <th>rank</th>\n",
+       "      <th>rate</th>\n",
+       "    </tr>\n",
+       "  </thead>\n",
+       "  <tbody>\n",
+       "    <tr>\n",
+       "      <th>18</th>\n",
+       "      <td>SBS</td>\n",
+       "      <td>생활의달인</td>\n",
+       "      <td>18</td>\n",
+       "      <td>5.900</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>19</th>\n",
+       "      <td>SBS</td>\n",
+       "      <td>불타는청춘</td>\n",
+       "      <td>20</td>\n",
+       "      <td>5.800</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>20</th>\n",
+       "      <td>TV CHOSUN</td>\n",
+       "      <td>세상어디에도없는아내의맛2부</td>\n",
+       "      <td>1</td>\n",
+       "      <td>10.566</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>21</th>\n",
+       "      <td>TV CHOSUN</td>\n",
+       "      <td>세상어디에도없는아내의맛1부</td>\n",
+       "      <td>2</td>\n",
+       "      <td>6.019</td>\n",
+       "    </tr>\n",
+       "  </tbody>\n",
+       "</table>\n",
+       "</div>"
+      ],
+      "text/plain": [
+       "    broadcast         program  rank    rate\n",
+       "18        SBS           생활의달인    18   5.900\n",
+       "19        SBS           불타는청춘    20   5.800\n",
+       "20  TV CHOSUN  세상어디에도없는아내의맛2부     1  10.566\n",
+       "21  TV CHOSUN  세상어디에도없는아내의맛1부     2   6.019"
+      ]
+     },
+     "execution_count": 86,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "result_df = pd.concat(dfs, ignore_index=True)\n",
+    "result_df[18:22]"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 87,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import pymongo\n",
+    "\n",
+    "client = pymongo.MongoClient('mongodb://test:testpw@15.165.136.173:27017')\n",
+    "db = client.wavve_server\n",
+    "collection = db.items"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 91,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "datas = collection.find({}, {\"_id\": False})"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 92,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/html": [
+       "<div>\n",
+       "<style scoped>\n",
+       "    .dataframe tbody tr th:only-of-type {\n",
+       "        vertical-align: middle;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe tbody tr th {\n",
+       "        vertical-align: top;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe thead th {\n",
+       "        text-align: right;\n",
+       "    }\n",
+       "</style>\n",
+       "<table border=\"1\" class=\"dataframe\">\n",
+       "  <thead>\n",
+       "    <tr style=\"text-align: right;\">\n",
+       "      <th></th>\n",
+       "      <th>count</th>\n",
+       "      <th>date</th>\n",
+       "      <th>title</th>\n",
+       "    </tr>\n",
+       "  </thead>\n",
+       "  <tbody>\n",
+       "    <tr>\n",
+       "      <th>598</th>\n",
+       "      <td>11회</td>\n",
+       "      <td>2004-01-17(토)</td>\n",
+       "      <td>X맨 1</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>599</th>\n",
+       "      <td>11회</td>\n",
+       "      <td>2020-01-08(수)</td>\n",
+       "      <td>팔로우 미 시즌12</td>\n",
+       "    </tr>\n",
+       "  </tbody>\n",
+       "</table>\n",
+       "</div>"
+      ],
+      "text/plain": [
+       "    count            date       title\n",
+       "598  11회    2004-01-17(토)        X맨 1\n",
+       "599  11회    2020-01-08(수)  팔로우 미 시즌12"
+      ]
+     },
+     "execution_count": 92,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "pd.DataFrame(datas).tail(2)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": []
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.6.9"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 4
+}
