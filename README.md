@@ -49,3 +49,9 @@
 ### MySQL 인코딩
 - 이모지까지 담을 수 있는 4바이트 utf8mb4으로 character set 설정
 ![14](https://user-images.githubusercontent.com/46242120/81136748-6248e700-8f97-11ea-89d6-17a9f5999537.jpeg)
+
+---
+
+### 결과
+-[OTT crawling.pdf](https://github.com/CATERINA-SEUL/crawling-project/files/4734301/FINAL._._.pdf)
+
